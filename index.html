@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>The Broadly Epi MMWR Archive</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Bootstrap CSS (no SRI for simplicity) -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      text-align: center;
+      margin-top: 1rem;
+      color: #004c6d;
+    }
+
+    /* Make container use full width */
+    .container-fluid {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+
+    /* Table styling */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: auto; /* Let columns size themselves */
+    }
+    th,
+    td {
+      vertical-align: top;
+      white-space: pre-wrap;      /* Wrap text onto multiple lines */
+      word-break: break-word;     /* Break long words to prevent overflow */
+      overflow-wrap: anywhere;    /* Additional fallback for older browsers */
+      padding: 0.75rem;
+      border: 1px solid #dee2e6;
+    }
+    th {
+      background-color: #004c6d;
+      color: #fff;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #f3f3f3;
+    }
+    tr:hover {
+      background-color: #e7f1f3;
+    }
+
+    /* The expand/collapse link */
+    .expand-btn {
+      color: #0d6efd;
+      cursor: pointer;
+      margin-left: 8px;
+      text-decoration: underline;
+    }
+    .expand-btn:hover {
+      text-decoration: none;
+    }
+
+    /* .d-none to hide full or short text as needed */
+    .d-none {
+      display: none !important;
+    }
+
+    /* Loading spinner container */
+    #loadingSpinner {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100px;
+    }
+    #loadingSpinner.hide {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Broadly Epi MMWR Archive</h1>
+
+  <div class="container-fluid mt-3">
+    <!-- Loading indicator -->
+    <div id="loadingSpinner">
+      <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="ms-2 mb-0">Loading data...</p>
+    </div>
+
+    <!-- Search and download row -->
+    <div class="row mb-3">
+      <div class="col-sm-6 mb-2">
+        <label for="searchInput" class="form-label">Search entries</label>
+        <input
+          type="text"
+          id="searchInput"
+          class="form-control"
+          placeholder="Type to search..."
+        />
+      </div>
+      <div class="col-sm-6 d-flex align-items-end">
+        <button id="downloadBtn" class="btn btn-primary ms-auto">
+          Download Data (CSV)
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div>
+      <table id="mmwrTable">
+        <thead>
+          <tr>
+            <th style="min-width: 120px;">Origin URL</th>
+            <th style="min-width: 200px;">Title</th>
+            <th style="min-width: 120px;">Date Issue</th>
+            <th style="min-width: 200px;">Main Text</th>
+            <th style="min-width: 200px;">Discussion</th>
+            <th style="min-width: 150px;">Corresponding</th>
+            <th style="min-width: 150px;">Citation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Rows inserted by JavaScript -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
+  <script>
+    let mmwrData = [];
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // Fetch JSON
+      fetch("MMWRLog.json")
+        .then(res => res.json())
+        .then(data => {
+          mmwrData = data;
+          document.getElementById("loadingSpinner").classList.add("hide");
+          renderTable(mmwrData);
+        })
+        .catch(err => {
+          console.error("Error fetching JSON:", err);
+          document.getElementById("loadingSpinner").innerHTML =
+            "<p class='text-danger'>Error loading data.</p>";
+        });
+
+      // Set up search
+      document
+        .getElementById("searchInput")
+        .addEventListener("input", handleSearch);
+
+      // Set up download
+      document.getElementById("downloadBtn").addEventListener("click", () => {
+        downloadCSV(mmwrData);
+      });
+    });
+
+    function renderTable(dataArray) {
+      const tbody = document.querySelector("#mmwrTable tbody");
+      tbody.innerHTML = "";
+
+      dataArray.forEach(entry => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>
+            <a href="${sanitize(entry["Origin URL"])}" target="_blank">Link</a>
+          </td>
+          <td>${sanitize(entry.Title)}</td>
+          <td>${sanitize(entry.DateIssue)}</td>
+          <td>${createExpandableCellHTML(entry.MainText)}</td>
+          <td>${createExpandableCellHTML(entry.Discussion)}</td>
+          <td>${sanitize(entry.Corresponding)}</td>
+          <td>${sanitize(entry.Citation)}</td>
+        `;
+
+        tbody.appendChild(tr);
+      });
+
+      // Attach expand/collapse
+      attachExpandListeners();
+    }
+
+    /**
+     * Creates two <span>s: one for truncated text, one for full text,
+     * plus an "Expand/Collapse" link that toggles them.
+     */
+    function createExpandableCellHTML(fullValue) {
+      // Convert non-strings to a string safely
+      if (fullValue == null) fullValue = "";
+      if (typeof fullValue !== "string") {
+        fullValue = String(fullValue);
+      }
+
+      // If it's short enough, no need to expand
+      if (fullValue.length <= 100) {
+        return `<span>${sanitize(fullValue)}</span>`;
+      }
+
+      const truncated = fullValue.slice(0, 100).trim() + "...";
+
+      // We'll have two spans:
+      // 1) shortSpan (visible by default)
+      // 2) fullSpan (hidden by default)
+      // plus a link (Expand/Collapse)
+      return `
+        <span class="shortSpan">${sanitize(truncated)}</span>
+        <span class="fullSpan d-none">${sanitize(fullValue)}</span>
+        <span class="expand-btn" data-collapsed="true">Expand</span>
+      `;
+    }
+
+    function attachExpandListeners() {
+      const expandBtns = document.querySelectorAll(".expand-btn");
+      expandBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const isCollapsed = btn.getAttribute("data-collapsed") === "true";
+          const parentCell = btn.parentNode;
+
+          // Find the shortSpan & fullSpan
+          const shortSpan = parentCell.querySelector(".shortSpan");
+          const fullSpan = parentCell.querySelector(".fullSpan");
+
+          if (isCollapsed) {
+            // Show the full text, hide truncated
+            shortSpan.classList.add("d-none");
+            fullSpan.classList.remove("d-none");
+            btn.textContent = "Collapse";
+            btn.setAttribute("data-collapsed", "false");
+          } else {
+            // Revert to truncated
+            shortSpan.classList.remove("d-none");
+            fullSpan.classList.add("d-none");
+            btn.textContent = "Expand";
+            btn.setAttribute("data-collapsed", "true");
+          }
+        });
+      });
+    }
+
+    function handleSearch(e) {
+      const searchValue = e.target.value.toLowerCase();
+
+      const filtered = mmwrData.filter(entry => {
+        const combined =
+          (entry["Origin URL"] || "") +
+          " " +
+          (entry.Title || "") +
+          " " +
+          (entry.DateIssue || "") +
+          " " +
+          (entry.MainText || "") +
+          " " +
+          (entry.Discussion || "") +
+          " " +
+          (entry.Corresponding || "") +
+          " " +
+          (entry.Citation || "");
+        return combined.toLowerCase().includes(searchValue);
+      });
+
+      renderTable(filtered);
+    }
+
+    function downloadCSV(dataArray) {
+      if (!dataArray.length) {
+        alert("No data available for download.");
+        return;
+      }
+      const csvString = convertToCSV(dataArray);
+      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "MMWRLog.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function convertToCSV(dataArray) {
+      const headers = Object.keys(dataArray[0] || {});
+      const csvRows = [headers.join(",")];
+
+      dataArray.forEach(obj => {
+        const row = headers.map(h => {
+          const val = obj[h] == null ? "" : obj[h].toString();
+          // escape double-quotes
+          return '"' + val.replace(/"/g, '""') + '"';
+        });
+        csvRows.push(row.join(","));
+      });
+
+      return csvRows.join("\n");
+    }
+
+    // Escape HTML to prevent XSS (handles non-string safely)
+    function sanitize(str) {
+      if (str == null) str = "";
+      if (typeof str !== "string") str = String(str);
+
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
