@@ -3,15 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <title>The Broadly Epi MMWR Archive</title>
+  <!-- Responsive meta tag -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script>
-    if (window !== window.parent) {
-        // Adjust scaling only if the content is inside an iframe
-        document.body.style.transform = "scale(0.8)";
-        document.body.style.transformOrigin = "top left";
-        document.body.style.width = "125%";
-    }
-</script>
 
   <!-- Bootstrap CSS (no SRI for simplicity) -->
   <link
@@ -20,19 +13,22 @@
   />
 
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f8f9fa;
+    html, body {
       margin: 0;
       padding: 0;
     }
+
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f8f9fa;
+    }
+
     h1 {
       text-align: center;
       margin-top: 1rem;
       color: #004c6d;
     }
 
-    /* Make container use full width */
     .container-fluid {
       padding-left: 2rem;
       padding-right: 2rem;
@@ -42,14 +38,13 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      table-layout: auto; /* Let columns size themselves */
+      table-layout: auto;
     }
-    th,
-    td {
+    th, td {
       vertical-align: top;
-      white-space: pre-wrap;      /* Wrap text onto multiple lines */
-      word-break: break-word;     /* Break long words to prevent overflow */
-      overflow-wrap: anywhere;    /* Additional fallback for older browsers */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
       padding: 0.75rem;
       border: 1px solid #dee2e6;
     }
@@ -65,7 +60,7 @@
       background-color: #e7f1f3;
     }
 
-    /* The expand/collapse link */
+    /* Expand/collapse link */
     .expand-btn {
       color: #0d6efd;
       cursor: pointer;
@@ -75,13 +70,11 @@
     .expand-btn:hover {
       text-decoration: none;
     }
-
-    /* .d-none to hide full or short text as needed */
     .d-none {
       display: none !important;
     }
 
-    /* Loading spinner container */
+    /* Loading spinner */
     #loadingSpinner {
       display: flex;
       justify-content: center;
@@ -123,25 +116,23 @@
       </div>
     </div>
 
-    <!-- Table -->
-    <div>
-      <table id="mmwrTable">
-        <thead>
-          <tr>
-            <th style="min-width: 120px;">URL</th>
-            <th style="min-width: 200px;">Title</th>
-            <th style="min-width: 120px;">Date/Issue</th>
-            <th style="min-width: 200px;">Main Text</th>
-            <th style="min-width: 200px;">Discussion</th>
-            <th style="min-width: 150px;">Contact</th>
-            <th style="min-width: 150px;">Citation</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Rows inserted by JavaScript -->
-        </tbody>
-      </table>
-    </div>
+    <!-- The table (no horizontal scroll). We'll auto-scale instead. -->
+    <table id="mmwrTable">
+      <thead>
+        <tr>
+          <th style="min-width: 120px;">URL</th>
+          <th style="min-width: 200px;">Title</th>
+          <th style="min-width: 120px;">Date/Issue</th>
+          <th style="min-width: 200px;">Main Text</th>
+          <th style="min-width: 200px;">Discussion</th>
+          <th style="min-width: 150px;">Contact</th>
+          <th style="min-width: 150px;">Citation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Rows inserted by JavaScript -->
+      </tbody>
+    </table>
   </div>
 
   <!-- Bootstrap JS -->
@@ -176,6 +167,11 @@
       document.getElementById("downloadBtn").addEventListener("click", () => {
         downloadCSV(mmwrData);
       });
+
+      // Attempt to auto-scale so table doesn't overflow horizontally
+      window.addEventListener("load", autoScaleToFit);
+      // If window/iframe is resized, you could re-scale again
+      window.addEventListener("resize", autoScaleToFit);
     });
 
     function renderTable(dataArray) {
@@ -184,7 +180,6 @@
 
       dataArray.forEach(entry => {
         const tr = document.createElement("tr");
-
         tr.innerHTML = `
           <td>
             <a href="${sanitize(entry["Origin URL"])}" target="_blank">Link</a>
@@ -196,36 +191,25 @@
           <td>${sanitize(entry.Corresponding)}</td>
           <td>${sanitize(entry.Citation)}</td>
         `;
-
         tbody.appendChild(tr);
       });
 
-      // Attach expand/collapse
       attachExpandListeners();
+      
+      // After rendering, scale again (in case content changed)
+      autoScaleToFit();
     }
 
-    /**
-     * Creates two <span>s: one for truncated text, one for full text,
-     * plus an "Expand/Collapse" link that toggles them.
-     */
     function createExpandableCellHTML(fullValue) {
-      // Convert non-strings to a string safely
       if (fullValue == null) fullValue = "";
       if (typeof fullValue !== "string") {
         fullValue = String(fullValue);
       }
-
-      // If it's short enough, no need to expand
+      // If it's short enough, no expand needed
       if (fullValue.length <= 100) {
         return `<span>${sanitize(fullValue)}</span>`;
       }
-
       const truncated = fullValue.slice(0, 100).trim() + "...";
-
-      // We'll have two spans:
-      // 1) shortSpan (visible by default)
-      // 2) fullSpan (hidden by default)
-      // plus a link (Expand/Collapse)
       return `
         <span class="shortSpan">${sanitize(truncated)}</span>
         <span class="fullSpan d-none">${sanitize(fullValue)}</span>
@@ -239,19 +223,15 @@
         btn.addEventListener("click", () => {
           const isCollapsed = btn.getAttribute("data-collapsed") === "true";
           const parentCell = btn.parentNode;
-
-          // Find the shortSpan & fullSpan
           const shortSpan = parentCell.querySelector(".shortSpan");
           const fullSpan = parentCell.querySelector(".fullSpan");
 
           if (isCollapsed) {
-            // Show the full text, hide truncated
             shortSpan.classList.add("d-none");
             fullSpan.classList.remove("d-none");
             btn.textContent = "Collapse";
             btn.setAttribute("data-collapsed", "false");
           } else {
-            // Revert to truncated
             shortSpan.classList.remove("d-none");
             fullSpan.classList.add("d-none");
             btn.textContent = "Expand";
@@ -263,7 +243,6 @@
 
     function handleSearch(e) {
       const searchValue = e.target.value.toLowerCase();
-
       const filtered = mmwrData.filter(entry => {
         const combined =
           (entry["Origin URL"] || "") +
@@ -281,7 +260,6 @@
           (entry.Citation || "");
         return combined.toLowerCase().includes(searchValue);
       });
-
       renderTable(filtered);
     }
 
@@ -306,30 +284,50 @@
     function convertToCSV(dataArray) {
       const headers = Object.keys(dataArray[0] || {});
       const csvRows = [headers.join(",")];
-
       dataArray.forEach(obj => {
         const row = headers.map(h => {
           const val = obj[h] == null ? "" : obj[h].toString();
-          // escape double-quotes
           return '"' + val.replace(/"/g, '""') + '"';
         });
         csvRows.push(row.join(","));
       });
-
       return csvRows.join("\n");
     }
 
-    // Escape HTML to prevent XSS (handles non-string safely)
     function sanitize(str) {
       if (str == null) str = "";
       if (typeof str !== "string") str = String(str);
-
       return str
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+    }
+
+    /**
+     * Auto‐scales the entire BODY if document content is wider than the window.
+     * This ensures NO horizontal scrollbar, but text may become small.
+     */
+    function autoScaleToFit() {
+      // Temporarily reset any scale to measure natural width
+      document.body.style.transform = "";
+      document.body.style.transformOrigin = "";
+      document.body.style.width = "";
+
+      // Measure the actual content width vs. the available window width
+      const docWidth = document.documentElement.scrollWidth;
+      const winWidth = window.innerWidth;
+
+      // If content is wider than the viewport, scale down
+      if (docWidth > winWidth) {
+        const scale = winWidth / docWidth;
+        // Apply the transform
+        document.body.style.transform = `scale(${scale})`;
+        document.body.style.transformOrigin = "top left";
+        // Expand body width so the scaled content lines up
+        document.body.style.width = (100 / scale) + "%";
+      }
     }
   </script>
 </body>
